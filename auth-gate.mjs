@@ -14,6 +14,7 @@ const siteShell = document.getElementById("site-shell");
 const authError = document.getElementById("auth-error");
 const authSuccess = document.getElementById("auth-success");
 const btnSignOut = document.getElementById("btn-sign-out");
+const btnSignIn = document.getElementById("btn-sign-in");
 const navUserEmail = document.getElementById("nav-user-email");
 const tabLogin = document.getElementById("auth-tab-login");
 const tabSignup = document.getElementById("auth-tab-signup");
@@ -25,6 +26,8 @@ const btnGoogle = document.getElementById("auth-btn-google");
 
 let auth = null;
 let booted = false;
+
+window.__curriculumAuthed = false;
 
 function env() {
   return window.__ENV__ || {};
@@ -44,6 +47,12 @@ function firebaseConfig() {
       e.FIREBASE_MESSAGING_SENDER_ID || e.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     appId: e.FIREBASE_APP_ID || e.NEXT_PUBLIC_FIREBASE_APP_ID,
   };
+}
+
+function isLoginRoute() {
+  const h = (location.hash || "#/").replace(/^#/, "");
+  const parts = h.split("/").filter(Boolean);
+  return parts[0] === "login";
 }
 
 function setError(msg) {
@@ -68,9 +77,11 @@ function isAllowed(user) {
 }
 
 function showSite(user) {
+  window.__curriculumAuthed = true;
   document.body.classList.remove("auth-locked");
   if (authScreen) authScreen.hidden = true;
   if (siteShell) siteShell.hidden = false;
+  if (btnSignIn) btnSignIn.hidden = true;
   if (navUserEmail && user?.email) {
     navUserEmail.textContent = user.email;
     navUserEmail.title = user.email;
@@ -84,14 +95,37 @@ function showSite(user) {
   if (!booted && typeof window.bootCurriculum === "function") {
     booted = true;
     window.bootCurriculum();
+  } else if (booted && typeof window.render === "function") {
+    window.render();
+  }
+}
+
+function showLanding() {
+  window.__curriculumAuthed = false;
+  document.body.classList.remove("auth-locked");
+  if (authScreen) authScreen.hidden = true;
+  if (siteShell) siteShell.hidden = false;
+  if (btnSignIn) btnSignIn.hidden = false;
+  if (btnSignOut) btnSignOut.hidden = true;
+  if (navUserEmail) {
+    navUserEmail.textContent = "";
+    navUserEmail.hidden = true;
+  }
+  if (!booted && typeof window.bootCurriculum === "function") {
+    booted = true;
+    window.bootCurriculum();
+  } else if (booted && typeof window.render === "function") {
+    window.render();
   }
 }
 
 function showAuthOnly() {
+  window.__curriculumAuthed = false;
   document.body.classList.add("auth-locked");
   if (authScreen) authScreen.hidden = false;
   if (siteShell) siteShell.hidden = true;
   if (btnSignOut) btnSignOut.hidden = true;
+  if (btnSignIn) btnSignIn.hidden = true;
   if (navUserEmail) {
     navUserEmail.textContent = "";
     navUserEmail.hidden = true;
@@ -104,19 +138,31 @@ function setBusy(busy) {
   });
 }
 
+function routeGuestView() {
+  if (isLoginRoute()) {
+    showAuthOnly();
+  } else {
+    showLanding();
+  }
+}
+
 async function handleUser(user) {
   if (!user) {
-    showAuthOnly();
+    routeGuestView();
     return;
   }
   if (!isAllowed(user)) {
     await signOut(auth);
     setError("このアカウントは利用が許可されていません。管理者にお問い合わせください。");
+    location.hash = "#/login";
     showAuthOnly();
     return;
   }
   setError("");
   setSuccess("");
+  if (isLoginRoute()) {
+    location.hash = "#/";
+  }
   showSite(user);
 }
 
@@ -148,10 +194,22 @@ function setAuthFormsDisabled(disabled) {
 
 async function init() {
   bindAuthTabs();
-  document.body.classList.add("auth-locked");
+
+  if (!location.hash || location.hash === "#") {
+    location.replace("#/");
+  }
+
+  window.addEventListener("hashchange", () => {
+    if (auth?.currentUser) {
+      if (isLoginRoute()) location.hash = "#/";
+      return;
+    }
+    routeGuestView();
+  });
 
   const cfg = firebaseConfig();
   if (!cfg?.apiKey || !cfg?.authDomain || !cfg?.projectId) {
+    location.hash = "#/login";
     showAuthOnly();
     setAuthFormsDisabled(true);
     setError(
@@ -161,6 +219,7 @@ async function init() {
   }
 
   setAuthFormsDisabled(false);
+  routeGuestView();
 
   const app = initializeApp(cfg);
   auth = getAuth(app);
@@ -222,7 +281,7 @@ async function init() {
     } catch (_) {}
     setBusy(false);
     location.hash = "#/";
-    showAuthOnly();
+    routeGuestView();
     setAuthTab("login");
   });
 }

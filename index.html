@@ -2682,6 +2682,7 @@
       <span class="nav-user-email" id="nav-user-email" hidden></span>
       <a href="#/">コース一覧</a>
       <a href="#/genres">ジャンル</a>
+      <a href="#/login" class="nav-auth-btn" id="btn-sign-in">ログイン</a>
       <button type="button" class="nav-auth-btn" id="btn-sign-out" hidden>ログアウト</button>
     </nav>
   </div>
@@ -3108,6 +3109,9 @@ const state = { filter: "all", query: "" };
 function getRoute() {
   const h = (location.hash || "#/").replace(/^#/, "");
   const parts = h.split("/").filter(Boolean);
+  if (parts[0] === "login") {
+    return { name: "login" };
+  }
   if (parts[0] === "g" && parts[1]) {
     return { name: "detail", id: parts[1], topic: parts[2] || null };
   }
@@ -5749,6 +5753,10 @@ function decorateBody(html, key) {
 
 function render() {
   const route = getRoute();
+  if (!window.__curriculumAuthed && route.name === "detail") {
+    location.hash = "#/login";
+    return;
+  }
   if (route.name === "detail") {
     const g = GENRES.find(x => x.id === route.id);
     if (!g) { location.hash = "#/"; return; }
@@ -5769,6 +5777,7 @@ function render() {
 }
 
 let curriculumStarted = false;
+window.render = render;
 window.bootCurriculum = function bootCurriculum() {
   if (curriculumStarted) return;
   curriculumStarted = true;
